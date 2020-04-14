@@ -23,9 +23,13 @@ tf = function(corpus, keywords, brute_freq = F, parrallel = T) {
       # Exclude minutes meetings, press releases and working papers erroneously scraped.
       # Check the first page of each document for bad keyword.
       
-      valid_document <- tibble(first_page = tolower(x[[1]])) %>% 
+      valid_document <- tryCatch(
+        tibble(first_page = tolower(x[[1]])) %>% 
         filter(!str_detect(first_page, paste(lexicon()[["Problematic_documents"]], collapse = "|"))) %>% 
-        nrow()
+        nrow(),
+        error = function(e){
+          "NULL/Na element in the corpus."
+        })
       
       # If is a valid document, continue with tf-calculation. Else, return NA.
       
