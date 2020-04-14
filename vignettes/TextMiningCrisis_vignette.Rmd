@@ -2,7 +2,10 @@
 title: "Introduction to TextMiningCrisis: <br> an accessible framework for Natural Language Processing"
 author: "Manuel Betin, Umberto Collodel"
 date: "3/20/2020"
-output: rmarkdown::html_vignette
+output: 
+  rmarkdown::html_document:
+    toc: true
+    theme: cosmo
 vignette: >
   %\VignetteIndexEntry{Introduction to TextMiningCrisis: an accessible framework for Natural Language Processing}
   %\VignetteEngine{knitr::rmarkdown}
@@ -12,90 +15,147 @@ vignette: >
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(eval = F)
+library(tidyverse)
+library(lubridate)
+library(TextMiningCrisis)
+library(pdftools)
 ```
 
-Getting started with text analysis can be a daunting task for researchers/practioners. <br> There are different elements of confusion: mainly, the many steps to take before the selected documents can be actually analyzed as quantitative data and the variety of functions coming from different packages, each with its own trade-offs. <br> 
-The purpose of the TextMiningCrisis package is to make Natural Language Processing tasks easier, hence more accessible and reproducible, consolidating the different steps into an unified framework.
+#Overview
+
+With the TextMiningCrisis package you can calculate how many times a specific topic is discussed in a corpus of documents i.e. the term frequency of a category. The package provides a set of functions to work easily with every step of the process, from the download of the pdf files to the tf calculation, in a computationally feasible way.
+
+We hope to make NPL tasks more accessible to researchers!
 
 
-![Stylized representation of normal steps into a NPL task](TextMiningCrisis_process.png)
+
+![Stylized representation of steps into a NPL task](TextMiningCrisis_process.png)
 
 There are five families of functions in the package to help you thorugh the different stages:
 <ol>
   <li>Lexicon: these functions allow to create and inspect your own dictionary of expressions related to the event of interest.</li>
-  <li>Text extraction: tools to download files and read (aggregate) into the global environment. </li>
-  <li>Text cleaning: cleanse corpus from elements that would hinder Natural Language Processing.</li>
+  <li>Text extraction: tools to download text files and read into the global environment. </li>
+  <li>Text cleaning: cleanse corpus from elements that would hinder the detection of keywords.</li>
   <li>Term frequencies: set of functions to compute tf-idfs from the corpus.</li>
   <li> Comparison and refine: check eventual mistakes and render updating easy.
 </ol>
 
 #Selection
-You can create your own dictionary of expressions for multiple categories.<br>
-In this case, we show the keywords we created for natural disasters and conflicts:
-```{r warning=FALSE}
+
+In our package, we only deal with supervised lexicon i.e. compiled by the researcher. In our examples, we start from a corpus of around 40000 IMF documents on 187 countries and reduce it to consider only documents regarding Argentina from 1980 to 1990. Say we want to know how many times natural disasters and wars are discussed in these reports: we start reading and writing down the frequent expressions we encounter.
+
+We do not impose any constraint on the length of the keyword, sometimes a longer expression may be more informative, while in other instances a single word is enough. Take the the keyword "civil war": without adding the adjective, how can we be sure that the Fund is not discussing the recent trade war between China and US?
+
+
+```{r warning=FALSE,eval=TRUE}
 TextMiningCrisis::lexicon() [c("Natural_disaster","Wars")]
 ```
 
+The ```lexicon()``` function returns a named list with the keywords from each category.
+
+[Add function to create your own dictionary with same body as lexicon() function]
+
+
+
 #Pre-processing
 ##Download files
-The function ```pdf_from_url``` downloads all the pdfs from a dataframe of urls into a specified directory.
-Three messages can appear during the process of download:
 
-1. name_file: succesfully downloaded
-1. name_file: already downloaded
-1. name_file: Error in path file
+We start from the original dataframe of 40000 urls and subset it:
+
+```{r warning=FALSE,eval=TRUE,echo=FALSE}
+
+rio::import("~/Desktop/Packages/TextMiningCrisis/data/IMF_docs_urls.rda") %>%
+  filter(ID == "ARG" & year(period) >= 1980 & year(period) <= 1990) %>% 
+  head()
+```
+
+We have informantion such as the name of the country the document is about, the date of publishing and other more specific information. We restricted it to the documents on Argentina in the 80s.
+
+```{r warning=FALSE,eval=TRUE,echo=FALSE}
+
+rio::import("~/Desktop/Packages/TextMiningCrisis/data/IMF_docs_urls.rda") %>%
+  filter(ID == "ARG" & year(period) >= 1980 & year(period) <= 1990) %>% 
+  select(name_file, pdf) %>% 
+  head()
+```
+
+<span style="font-weight:900"> Note: </span> While other columns are not necessary, the dataframe must have at a least name_file and pdf columns, to proceed further.<p>
+
+The function ```pdf_from_url``` downloads all the pdfs from an urls dataframe into a directory: the name of the file will be the associated name_file column. It has two arguments to specify: the urls dataframe and the export path where to download the pdf files.
+
+There is also an option to overwrite existing documents with the same name: the default is TRUE. This means all the files are going to be downloaded again indipendently from whether they exist or not in the directory. If we set it equal to FALSE, the function will check first whether the name_file.pdf exists already in the directory and skip its download if this is the case.
+
+Two thing can go awry in this process: first, the download might not have worked for some files, second, we forgot some urls in the scraping process. We have two functions to detect these problems:
+
+```{r warning=FALSE,eval=FALSE,echo=FALSE}
+
+check_diff_pdfs_urls()
+
+```
 
 
+If the vector is non-empty, some files that are in the dataframe have not been downloaded. You can re-try to download, this time setting the overwrite option equal to not repeat the whole process and lose time.
+
+```{r warning=FALSE,eval=FALSE,echo=FALSE}
+
+check_gaps_pdfs("~/Desktop/Packages/TextMiningCrisis/data/docs_example/")
+
+```
+
+The function ```check_gaps_pdfs``` tells us if there are year gaps in the pdfs. If it returns a non-empty list, it means there are gap years. You should check again the scraping process.
 
 
 ##Aggregate corpus
-The function ```aggregate_corpus``` loads all the files present into a directory into a single list and cleans them.
 
-```{r warning=FALSE,results='hide'}
-## Aggregate files in docs_example directory (IMF documents for Argentina 1980-1990):
+Once all the pdf files have been downloaded, the next step is to read them into the global environment of R. 
+For this step, we created the function ```aggregate corpus```. The function takes two arguments, the directory with all the pdf files to include in a corpus and the function to use for reading them, and binds them into a list. 
 
-#corpus <- TextMiningCrisis::aggregate_corpus("../data/docs_example", only_files = T)
+```{r warning=FALSE, eval=TRUE}
+
+corpus <- aggregate_corpus("../data/docs_example", pdf_text, only_files = T)
+
+```
+Inside the function, we assign a new class - <span style="background-color: #ADD8E6">corpusTM</span> - to this list object. In this way, we can have a more user-friendly visualization every time we print the list:
+
+```{r warning=FALSE, eval=TRUE}
+print(corpus)
+
 ```
 
-```{r}
-# Show the second page of the first document:
-data("IMF_corpus_example")
-corpus=IMF_corpus_example
+Every element of this new corpusTM object is a pdf document divided into pages with the name of the original pdf. Below, we inspect the second page of the first document for our Argentina files:
+
+```{r eval=TRUE,echo=TRUE}
+
+names(corpus)[[1]]
 corpus[[1]][[2]]
+
 ```
 
-
+At this stage, we should be done with pre-processing. Nevertheless, sometimes we want to add new documents to our original corpus. If we re-aggregate everything the process could take a long time: that's why we included a function ```add_to_corpus```. 
 
 #NPL
-```run_tf``` returns from the corpus of documents a term-frequency matrix. What is it? For each of the categories in the ```lexicon``` function, counts the occurence of the selected keywords in every document and divides it by the total number of characters.<br> <br>
-In this example, we want to quantify the use of words related to currency crisis and wars in documents on Argentina published by the IMF. The period our corpus covers is 1970-1980:
-```{r warning=FALSE,results='hide'}
+We can finally achieve our final purpose: calculating the frequency of some keywords in our list of documents.
+The function ```run_tf``` takes a corpus path, a character string of categories (see Selection) and some additional arguments. For each of the categories, counts the occurence of the keywords in every document and divides it by the total number of characters. It returns a tibble with the name of the individual files and the value of the term frequencies for each category. 
 
+<span style="font-weight:900"> IMPORTANT: <span> To be more precise, what happens is that each document is tokenized into sentences and for each sentence we search for a correspondence.
+
+In this example, we want to quantify the use of words related to currency crisis and wars in documents on Argentina published by the IMF. The period our corpus spans is 1980-1990:
+```{r warning=FALSE, eval = TRUE}
 
 # Create a term-frequency matrix for previous corpus:
-data("IMF_tf_example")
 
-tf <-TextMiningCrisis::run_tf("../data/corpus_example.RData",keyword_list = c("Currency_crisis_severe","Wars"))
+tf <- run_tf("../data/IMF_corpus_example.rda",keyword_list = c("Currency_crisis_severe","Wars"))
+print(tf)
 
 ```
 
-```{r, echo=F}
-# Display matrix:
-tf
-```
 Let's plot the two indexes:
 
 
-```{r, include=FALSE}
-# Load packages used in this session:
-
-library(ggplot2)
-library(tidyverse)
-```
-
-```{r fig.width=7}
+```{r fig.width= 10, eval=TRUE}
 
 # Extract year and iso3, average over documents by year:
+
 
 tf_year <- tf %>% 
   mutate(year = str_extract(file,"\\d{4}")) %>%
@@ -121,48 +181,46 @@ tf_year %>%
 
 There seems to be three different waves of currency crises, in 1981,1983-1985 and 1989. In the last year of the decade the tf reaches its maximumum: 0.01\% of the documents' characters is on average devoted to currency crisis. For wars, instead, the index starts rising in 1983 and reaches its peak in 1985.
 
+Notice that this approach is highly flexible: one can potentially create different categories, observe how they co-move and start a more formal analysis.
 
-##Under the hood: important add-ons
+# Up the sleeve
+##Avoid problematic documents
+We wish scraping were a pain-free process! In a perfect world, we end up with a list of all the relevant documents urls. Truth is, we usually end up with a bunch of documents urls that we are not interested in or worse, that create important problems for the calculation of the term frequencies. If this kind of information is not present into the metadata, the next logical step to take would be the manually erase these documents.
 
-<ol>
-  <li> Avoid problematic documents:<br>
-  In the scraping process, we might end up with some URLs of problematic documents i.e. documents on which we do not want to conduct the tf extraction. In our example, we downloaded many working paper together with. If this kind of information is not present into the metadata, the next logical step to take would be the manually erase these documents: this, in turn, would be tedious and take a long time. <br> <br>
-  We incorporate an automated alternative to the best of our possibilities in the ```run_tf``` function. Given a set of keywords in our dictionary (included in the category Problematic_documents)
-  
-```{r}
-TextMiningCrisis::lexicon()[c("Problematic_documents")] %>% data.frame() %>% filter(str_detect(Problematic_documents, "working"))
+
+Following with our example, after the scraping of IMF archives, we end up not only with country reports published at regular intervals, but also more general reports in which the outlook of many different countries is discussed. We are working with a full corpus of 400000 documents: manually inspecting them is not a feasible alternative. Luckily, we notice these documents have a similar pattern in their first page i.e. an expression that always repeats. We can use this fact to exclude them.
+
+We already incorporated this step in the ```run_tf``` function. Specifically, if a Problematic_documents category exists in the lexicon, with the keywords from the documents you want to exclude first page, the function will first check the first page of each document before performing the extraction: if it finds one of the keywords, an NA will be returned.
+
+Here an example of the expression we do not want in the documents' first page:
+
+
+```{r eval=TRUE, echo=FALSE}
+lexicon()[c("Problematic_documents")] %>% data.frame() 
 ```
   
   
-  the function checks if at least one of them appears in the first page of each document of the corpus: if the logical returns TRUE, the extraction is not performed and an NA is returned in the dataframe for the respective file.
-  
-  
-  <li> Confusing keywords: sometimes words included in a category may refer to another individual e.g. talking about currency   crisis in other countries. <br> <br>
-  We offer the possibility to control for this issue for any category of interest in the lexicon. It is sufficient to create a   category with same name, ending with "*_confusing". Here an example for currency crises:
-```{r}
-TextMiningCrisis::lexicon()[c("Currency_crisis_confusing")] %>% data.frame() 
-```
-
-The correction clearly will not run for the countries/individuals the confusing keywords refer to.
-
-</ol>
-
 
 #Comparison
-Now, you are a bit surprised by the result, you did not know about any currency crisis for Argentina in 1989. Nevertheless, there it is the peak of your index. <br>
+Now, you are a bit surprised by the result, you did not know about any currency crisis for Argentina in 1989. Nevertheless, there it is the peak of your index.
+
 Is it a colossal blunder or indeed the truth?
-What are the exact keywords that were detected? and in which context? <br>
-To check, we can use the ```get_sentences``` function. 
+What are the exact keywords that were detected? and in which context?
 
-```{r}
+To check, we can use the ```get_sentences``` function. It takes a corpus object and a character string with categories from the lexicon and returns a list. Each element of the list is a dataframe containing the keyword detected for the category specified and the corresponding sentence.
 
-sentences_currency_crisis <- TextMiningCrisis::get_sentences(corpus, c("Currency_crisis_severe"))
+Here, we select from the list the document published in 1989-10-17:
+
+```{r eval=TRUE}
+
+sentences_currency_crisis <- get_sentences(rio::import("../data/IMF_corpus_example.rda"), c("Currency_crisis_severe"))
 sentences_currency_crisis[["ARG_1989-10-17_request"]]
 
 ```
-Was the IMF really talking about currency crises in that year for Argentina or the lexicon we used has some issues that need to be addressed?<br>
 
-```{r}
+Let's have a more precise look at one sentence:
+
+```{r eval=TRUE}
 # Extract the third sentence with keyword detected in a randomly chosen 1989 document:
 
 sentences_currency_crisis[["ARG_1989-10-17_request"]] %>% 
