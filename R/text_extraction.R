@@ -167,7 +167,7 @@ aggregate_corpus = function(path_files, ENGINE, only_files = F) {
   if(any(corpus %>% purrr::map_lgl(~ is_empty(.x)))){
     warning("Null elements in the corpus: check engine and format document. \n")
   }
-  if(corpus %>% purrr::map(~ any(is.na(.x)))){
+  if(any(corpus %>% purrr::map_lgl(~ any(is.na(.x))))){
     warning("Na elements in the corpus: check urls and pdfs. \n")
   }
   return(corpus)
