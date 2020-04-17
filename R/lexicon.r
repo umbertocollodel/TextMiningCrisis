@@ -1458,6 +1458,7 @@ lexicon <- function(){
     "(?<!the documents listed below have been or will be separately released. )selected issues", # Selected issues
     "(?<!the documents listed below have been or will be separately released. selected issues )financial system stability assessment", # Similar to selected issues for financial system
     "poverty reduction strategy paper", # Similar to selected issues for poverty 
+    "enhanced heavily indebted poor countries initiative",
     "individual economy assessments", # Assessments on multiple countries for a single issue
     "global financial stability report", # found looking through epidemics India
     "debt sustainability analysis", #?
